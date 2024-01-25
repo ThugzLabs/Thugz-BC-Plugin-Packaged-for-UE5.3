@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Created in 2024. Copyright Thugz Labs SAS, all rights reserved.
 
 #include "ThugzBCfor53BPLibrary.h"
 #include "ThugzBCfor53.h"

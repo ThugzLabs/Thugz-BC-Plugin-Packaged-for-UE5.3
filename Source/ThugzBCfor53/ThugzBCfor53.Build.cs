@@ -1,4 +1,4 @@
-// Some copyright should be here...
+// Created in 2024. Copyright Thugz Labs SAS, all rights reserved.
 
 using UnrealBuildTool;
 
