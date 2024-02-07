@@ -7,7 +7,12 @@
 
 
 FString UThugzBCBPLibrary::LastJsonResponse = FString("");
+FString UThugzBCBPLibrary::LastTokenBalance = FString("");
 
+
+/////////////////////////////////////////////////////////////HELLOMOON//////////////////////////////////////////////////////////////////////////////
+
+// requête pour HelloMoon API
 void UThugzBCBPLibrary::MakeHelloMoonAPIRequest(const FString& Account, const FString& Barear)
 {
     FString HelloMoonURL = TEXT("https://rest-api.hellomoon.io/v0/nft/mints-by-owner"); // Remplacez par l'URL de votre endpoint HelloMoon
@@ -29,6 +34,7 @@ void UThugzBCBPLibrary::MakeHelloMoonAPIRequest(const FString& Account, const FS
     HttpRequest->ProcessRequest();
 }
 
+// Traitement de la requête pour les API NFT (HelloMoon ou Moralis)
 void UThugzBCBPLibrary::HandleHelloMoonAPIResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 {
     if (!bWasSuccessful)
@@ -55,12 +61,8 @@ void UThugzBCBPLibrary::HandleHelloMoonAPIResponse(FHttpRequestPtr Request, FHtt
 
 }
 
-FString UThugzBCBPLibrary::GetLastJsonResponse()
-{
-    return LastJsonResponse;
-}
-
-FRootJson UThugzBCBPLibrary::ConvertJSONtoStruct(FString JsonString)
+//Parsing en structure UE du JSON de HelloMoon API
+FRootJson UThugzBCBPLibrary::ConvertSOLJSONtoStruct(FString JsonString)
 {
 
     FString YourJsonFString; // Votre JSON ici
@@ -109,4 +111,203 @@ FRootJson UThugzBCBPLibrary::ConvertJSONtoStruct(FString JsonString)
     }
     return RootStruct;
 }
+
+
+//Balance Solana avec Hellomoon
+
+void UThugzBCBPLibrary::HelloMoonRequestForTokenBalance(const FString& Param, const FString& ApiKey, FString& OutResponse)
+{
+    TSharedPtr<FJsonObject> JsonObject = MakeShareable(new FJsonObject);
+    JsonObject->SetStringField(TEXT("jsonrpc"), TEXT("2.0"));
+    JsonObject->SetNumberField(TEXT("id"), 1);
+    JsonObject->SetStringField(TEXT("method"), TEXT("getBalance"));
+    TArray<TSharedPtr<FJsonValue>> Params;
+    Params.Add(MakeShareable(new FJsonValueString(Param))); // Use the parameter passed to the function
+    JsonObject->SetArrayField(TEXT("params"), Params);
+
+    FString RequestContent;
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RequestContent);
+    FJsonSerializer::Serialize(JsonObject.ToSharedRef(), Writer);
+
+    FHttpModule* Http = &FHttpModule::Get();
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> HttpRequest = Http->CreateRequest();
+    HttpRequest->SetURL(FString::Printf(TEXT("https://rpc.hellomoon.io/%s"), *ApiKey)); // Use the API Key in the URL
+    HttpRequest->SetVerb(TEXT("POST"));
+    HttpRequest->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+    HttpRequest->SetHeader(TEXT("Accept"), TEXT("application/json"));
+
+    HttpRequest->SetContentAsString(RequestContent);
+
+    // Bind a lambda to the completion delegate
+    HttpRequest->OnProcessRequestComplete().BindLambda([&OutResponse](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+        {
+            if (bWasSuccessful && Response.IsValid())
+            {
+                // Assign the response content to the output parameter
+                OutResponse = Response->GetContentAsString();
+                LastTokenBalance = OutResponse;
+            }
+            else
+            {
+                OutResponse = TEXT("Failed to get a response");
+            }
+        });
+
+    HttpRequest->ProcessRequest();
+}
+
+//Requête récuperant la repons eJSON de getbalance d'HelloMoon pour la mettre dans un double en sortie
+void UThugzBCBPLibrary::GetTokenBamanceFromJsonHelloMoon(const FString& JsonString, double& OutValue)
+{
+    TSharedPtr<FJsonObject> JsonObject;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
+
+    if (FJsonSerializer::Deserialize(Reader, JsonObject) && JsonObject.IsValid())
+    {
+        // Obtention de l'objet "result"
+        const TSharedPtr<FJsonObject>* ResultObject;
+        if (JsonObject->TryGetObjectField(TEXT("result"), ResultObject))
+        {
+            // Extraction et affectation de la valeur à OutValue
+            OutValue = (*ResultObject)->GetNumberField(TEXT("value")) / 1000000000.0;
+        }
+    }
+}
+
+
+
+////////////////////////////////////////////////////////MORALIS//////////////////////////////////////////////////////////////////////////////////////
+// 
+// requête pour Moralis API
+void UThugzBCBPLibrary::MoralisAPIRequest(const FString& AccountAddress, const FString& ApiKey, const FString& Blockchain) {
+
+    FString Url = FString::Printf(TEXT("https://deep-index.moralis.io/api/v2/%s/nft?chain=%s&format=decimal"), *AccountAddress, *Blockchain);
+
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(Url);
+    Request->SetVerb(TEXT("GET"));
+    Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
+    Request->SetHeader(TEXT("X-API-Key"), *ApiKey);
+    Request->ProcessRequest();
+
+    Request->OnProcessRequestComplete().BindStatic(&UThugzBCBPLibrary::HandleHelloMoonAPIResponse);
+
+    Request->ProcessRequest();
+
+}
+
+//Parsing du JSON de l'API MORALIS
+FEVMFNFTResponse UThugzBCBPLibrary::ConvertEVMJSONtoStruct(FString JsonString)
+{
+
+    TSharedPtr<FJsonObject> JsonObject;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
+    FEVMFNFTResponse NFTResponse;
+
+    if (FJsonSerializer::Deserialize(Reader, JsonObject) && JsonObject.IsValid())
+    {
+
+
+        NFTResponse.Status = JsonObject->GetStringField("status");
+        NFTResponse.Page = JsonObject->GetIntegerField("page");
+        NFTResponse.PageSize = JsonObject->GetIntegerField("page_size");
+
+        TArray<TSharedPtr<FJsonValue>> ResultsArray = JsonObject->GetArrayField("result");
+        for (TSharedPtr<FJsonValue> Value : ResultsArray)
+        {
+            TSharedPtr<FJsonObject> ResultObject = Value->AsObject();
+            FEVMFNFTData NFTData;
+
+            NFTData.Amount = ResultObject->GetStringField("amount");
+            NFTData.TokenId = ResultObject->GetStringField("token_id");
+            NFTData.TokenAddress = ResultObject->GetStringField("token_address");
+            NFTData.ContractType = ResultObject->GetStringField("contract_type");
+            NFTData.OwnerOf = ResultObject->GetStringField("owner_of");
+            NFTData.last_metadata_sync = ResultObject->GetStringField("last_metadata_sync");
+            NFTData.last_token_uri_sync = ResultObject->GetStringField("last_token_uri_sync");
+            NFTData.block_number = ResultObject->GetStringField("block_number");
+            NFTData.name = ResultObject->GetStringField("name");
+            NFTData.symbol = ResultObject->GetStringField("symbol");
+            NFTData.token_hash = ResultObject->GetStringField("token_hash");
+            NFTData.token_uri = ResultObject->GetStringField("token_uri");
+            NFTData.minter_address = ResultObject->GetStringField("minter_address");
+            NFTData.verified_collection = ResultObject->GetStringField("verified_collection");
+
+
+            FString MetadataString = ResultObject->GetStringField("metadata");
+            TSharedPtr<FJsonObject> MetadataObject;
+            TSharedRef<TJsonReader<>> MetadataReader = TJsonReaderFactory<>::Create(MetadataString);
+            if (FJsonSerializer::Deserialize(MetadataReader, MetadataObject) && MetadataObject.IsValid())
+            {
+                FEVMFNFTMetadata Metadata;
+                Metadata.Image = MetadataObject->GetStringField("image");
+                Metadata.Name = MetadataObject->GetStringField("name");
+                Metadata.description = MetadataObject->GetStringField("description");
+                Metadata.external_url = MetadataObject->GetStringField("external_url");
+
+                NFTData.Metadata = Metadata;
+            }
+
+            NFTResponse.Result.Add(NFTData);
+        }
+
+
+    }
+    return NFTResponse;
+}
+// Récupération du JSON de la balance Solana avec MORALIS
+void UThugzBCBPLibrary::MakeMoraliseRequestForSOLBalance(const FString& Pkey, const FString& ApiKey, FString& OutResponse)
+{
+    FString Url = FString::Printf(TEXT("https://solana-gateway.moralis.io/account/mainnet/%s/balance"), *Pkey);
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(Url);
+    Request->SetVerb(TEXT("GET"));
+    Request->SetHeader(TEXT("accept"), TEXT("application/json"));
+    Request->SetHeader(TEXT("X-API-Key"), ApiKey);
+
+    Request->OnProcessRequestComplete().BindLambda([&OutResponse](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+        {
+            if (bWasSuccessful && Response.IsValid())
+            {
+                OutResponse = Response->GetContentAsString();
+            }
+            else
+            {
+                OutResponse = TEXT("Failed to fetch balance");
+            }
+        });
+
+    Request->ProcessRequest();
+}
+
+//Requête récuperant la reponse JSON de la requête MORALIS pour la mettre dans un double en sortie
+void UThugzBCBPLibrary::GetTokenBamanceFromJsonMoralis(const FString& JsonString, double& OutSolanaValue)
+{
+    TSharedPtr<FJsonObject> JsonObject;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
+
+    if (FJsonSerializer::Deserialize(Reader, JsonObject) && JsonObject.IsValid())
+    {
+        if (JsonObject->HasField(TEXT("solana")))
+        {
+            FString SolanaString = JsonObject->GetStringField(TEXT("solana"));
+            OutSolanaValue = FCString::Atod(*SolanaString);
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////TRANSVERSE/////////////////////////////////////////////////////////////////////////////////
+
+//requête récupéant la réponse de n'importe quel API pour la mettre dans un FSTRING à parser
+FString UThugzBCBPLibrary::GetLastJsonResponse()
+{
+    return LastJsonResponse;
+}
+
+FString UThugzBCBPLibrary::GetLastTokenJsonResponse()
+{
+    return LastTokenBalance;
+}
+
+
 

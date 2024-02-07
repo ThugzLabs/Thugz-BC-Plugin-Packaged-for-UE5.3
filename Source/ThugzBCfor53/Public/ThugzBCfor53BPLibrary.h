@@ -13,9 +13,10 @@
 
 class FJsonObject;
 
-/**
- *
- */
+// Définition des structures UE qui acceuilleront les réponses JSON
+
+//////////////////STRUCTURE POUR SOLANA HELLOMOON/////////////////////////////////
+
 USTRUCT(BlueprintType)
 struct FCreator
 {
@@ -80,9 +81,105 @@ struct FRootJson
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
     TArray<FNFTData> Data;
 };
+//////////////////STRUCTURE POUR SOLANA HELLOMOON/////////////////////////////////
 
 
 
+//////////////////STRUCTURE POUR EVM MORALIS/////////////////////////////////
+
+USTRUCT(BlueprintType)
+struct FEVMFNFTMetadata
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString Image;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString Name;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString description;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString external_url;
+
+};
+
+USTRUCT(BlueprintType)
+struct FEVMFNFTData
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString Amount;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString TokenId;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString TokenAddress;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString ContractType;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString OwnerOf;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString last_metadata_sync;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString last_token_uri_sync;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString block_number;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString name;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString symbol;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString token_hash;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString token_uri;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString minter_address;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString verified_collection;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FEVMFNFTMetadata Metadata;
+};
+
+USTRUCT(BlueprintType)
+struct FEVMFNFTResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    FString Status;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    int32 Page;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    int32 PageSize;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thugz Labs JSON")
+    TArray<FEVMFNFTData> Result;
+
+};
+
+
+//////////////////STRUCTURE POUR EVM MORALIS/////////////////////////////////
+
+// Définition des fonctions Blueprint
 UCLASS()
 class UThugzBCBPLibrary : public UBlueprintFunctionLibrary
 {
@@ -93,36 +190,41 @@ public:
     static void MakeHelloMoonAPIRequest(const FString& Account, const FString& Barear);
 
     UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
+    static void MoralisAPIRequest(const FString& AccountAddress, const FString& ApiKey, const FString& Blockchain);
+
+    UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
     static FString GetLastJsonResponse();
 
     UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
-    static FRootJson ConvertJSONtoStruct(FString JsonString);
+    static FRootJson ConvertSOLJSONtoStruct(FString JsonString);
+
+    UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
+    static FEVMFNFTResponse ConvertEVMJSONtoStruct(FString JsonString);
+
+    UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
+    static void HelloMoonRequestForTokenBalance(const FString& Param, const FString& ApiKey, FString& OutResponse);
+
+    UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
+    static FString GetLastTokenJsonResponse();
+
+    UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
+    static void GetTokenBamanceFromJsonHelloMoon(const FString& JsonString, double& OutValue);
+
+    UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
+    static void MakeMoraliseRequestForSOLBalance(const FString& Pkey, const FString& ApiKey, FString& OutResponse);
+
+    UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
+    static void GetTokenBamanceFromJsonMoralis(const FString& JsonString, double& OutSolanaValue);
 
 private:
     static FString LastJsonResponse;
 
+    static FString LastTokenBalance;
+
     static void HandleHelloMoonAPIResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful);
+
 
 };
 
 
-/*
-*	Function library class.
-*	Each function in it is expected to be static and represents blueprint node that can be called in any blueprint.
-*
-*	When declaring function you can define metadata for the node. Key function specifiers will be BlueprintPure and BlueprintCallable.
-*	BlueprintPure - means the function does not affect the owning object in any way and thus creates a node without Exec pins.
-*	BlueprintCallable - makes a function which can be executed in Blueprints - Thus it has Exec pins.
-*	DisplayName - full name of the node, shown when you mouse over the node and in the blueprint drop down menu.
-*				Its lets you name the node using characters not allowed in C++ function names.
-*	CompactNodeTitle - the word(s) that appear on the node.
-*	Keywords -	the list of keywords that helps you to find node when you search for it using Blueprint drop-down menu.
-*				Good example is "Print String" node which you can find also by using keyword "log".
-*	Category -	the category your node will be under in the Blueprint drop-down menu.
-*
-*	For more info on custom blueprint nodes visit documentation:
-*	https://wiki.unrealengine.com/Custom_Blueprint_Node_Creation
-*/
-
-//GENERATED_UCLASS_BODY()
 
