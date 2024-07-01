@@ -9,6 +9,14 @@
 #include "Serialization/JsonSerializer.h"
 #include "Dom/JsonObject.h"
 #include "JsonObjectConverter.h"
+#include "Engine/Texture2D.h"
+#include "Engine/Texture.h"
+#include "RenderUtils.h"
+#include "TextureResource.h"
+#include "RenderResource.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
+#include "Misc/Paths.h"
 #include "ThugzBCfor53BPLibrary.generated.h"
 
 class FJsonObject;
@@ -216,12 +224,24 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
     static void GetTokenBamanceFromJsonMoralis(const FString& JsonString, double& OutSolanaValue);
 
+    UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
+    static void MakeURIRequest(const FString& URL);
+
+    UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
+    static bool ParseImageURL(const FString& JsonString, FString& OutImageURL);
+
+    UFUNCTION(BlueprintCallable, Category = "Web3 Thugz Labs Plugin")
+    static void DownloadImageAndCreateTexture(const FString& URL, UTexture2D*& OutTexture);
+
 private:
     static FString LastJsonResponse;
 
     static FString LastTokenBalance;
 
     static void HandleHelloMoonAPIResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful);
+
+    static void OnImageDownloaded(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful, UTexture2D** OutTexture);
+    static UTexture2D* CreateTextureFromImageData(const TArray<uint8>& ImageData);
 
 
 };

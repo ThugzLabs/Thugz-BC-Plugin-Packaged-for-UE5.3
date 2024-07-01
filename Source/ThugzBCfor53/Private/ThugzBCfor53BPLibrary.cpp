@@ -1,6 +1,8 @@
 // Created in 2024. Copyright Thugz Labs SAS, all rights reserved.
 
 #include "ThugzBCfor53BPLibrary.h"
+#include "Engine/Texture2D.h"
+#include "Engine/Texture.h"
 #include "ThugzBCfor53.h"
 
 
@@ -33,6 +35,114 @@ void UThugzBCBPLibrary::MakeHelloMoonAPIRequest(const FString& Account, const FS
 
     HttpRequest->ProcessRequest();
 }
+
+//Requete pour récupérer l'URI de hellomoon
+void UThugzBCBPLibrary::MakeURIRequest(const FString& URL)
+{
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+    Request->OnProcessRequestComplete().BindStatic(&UThugzBCBPLibrary::HandleHelloMoonAPIResponse);
+    Request->SetURL(URL);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->ProcessRequest();
+}
+bool UThugzBCBPLibrary::ParseImageURL(const FString& JsonString, FString& OutImageURL)
+{
+    LastJsonResponse = JsonString; // Store the raw JSON response
+
+    TSharedPtr<FJsonObject> JsonObject;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
+
+    if (FJsonSerializer::Deserialize(Reader, JsonObject) && JsonObject.IsValid())
+    {
+        if (JsonObject->HasField("image"))
+        {
+            OutImageURL = JsonObject->GetStringField("image");
+            return true;
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("JSON does not contain 'image' field"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to parse JSON"));
+    }
+
+    return false;
+}
+//Récuperation de l'image et creation de la texture depuis l'URL obtenu par ParseImageURL
+void UThugzBCBPLibrary::DownloadImageAndCreateTexture(const FString& URL, UTexture2D*& OutTexture)
+{
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+    Request->OnProcessRequestComplete().BindStatic(&UThugzBCBPLibrary::OnImageDownloaded, &OutTexture);
+    Request->SetURL(URL);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->ProcessRequest();
+}
+
+void UThugzBCBPLibrary::OnImageDownloaded(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful, UTexture2D** OutTexture)
+{
+    if (bWasSuccessful && Response.IsValid())
+    {
+        const TArray<uint8>& ImageData = Response->GetContent();
+        *OutTexture = CreateTextureFromImageData(ImageData);
+        if (*OutTexture)
+        {
+            UE_LOG(LogTemp, Log, TEXT("Image downloaded and texture created successfully."));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to create texture from downloaded image."));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to download image."));
+    }
+}
+
+UTexture2D* UThugzBCBPLibrary::CreateTextureFromImageData(const TArray<uint8>& ImageData)
+{
+    IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+    EImageFormat ImageFormat = ImageWrapperModule.DetectImageFormat(ImageData.GetData(), ImageData.Num());
+
+    if (ImageFormat == EImageFormat::Invalid)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Invalid image format."));
+        return nullptr;
+    }
+
+    TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule.CreateImageWrapper(ImageFormat);
+
+    if (ImageWrapper.IsValid() && ImageWrapper->SetCompressed(ImageData.GetData(), ImageData.Num()))
+    {
+        TArray<uint8> UncompressedBGRA;
+        if (ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, UncompressedBGRA))
+        {
+            UTexture2D* Texture = UTexture2D::CreateTransient(ImageWrapper->GetWidth(), ImageWrapper->GetHeight(), PF_B8G8R8A8);
+
+            if (!Texture)
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to create transient texture."));
+                return nullptr;
+            }
+
+            void* TextureData = Texture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+            FMemory::Memcpy(TextureData, UncompressedBGRA.GetData(), UncompressedBGRA.Num());
+            Texture->GetPlatformData()->Mips[0].BulkData.Unlock();
+
+            Texture->UpdateResource();
+            return Texture;
+        }
+    }
+
+    UE_LOG(LogTemp, Error, TEXT("Failed to uncompress image."));
+    return nullptr;
+}
+
 
 // Traitement de la requête pour les API NFT (HelloMoon ou Moralis)
 void UThugzBCBPLibrary::HandleHelloMoonAPIResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
